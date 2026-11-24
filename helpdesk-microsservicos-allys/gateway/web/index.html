@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light">
+<title>HelpDesk TI</title>
+<link rel="stylesheet" href="/estilo.css">
+</head>
+<body>
+
+<header class="topo">
+  <div class="marca"><span class="sigla" aria-hidden="true">HD</span><span>HelpDesk TI</span></div>
+  <div class="conta" id="barra" hidden>
+    <button id="sino" class="sino" type="button" aria-expanded="false" aria-controls="painel-avisos">
+      Avisos <span id="contador" class="contador">0</span>
+    </button>
+    <span id="quem" class="quem"></span>
+    <button id="sair" type="button" class="discreto">Sair</button>
+  </div>
+</header>
+
+<form class="login" id="tela-login" aria-labelledby="titulo-login">
+  <h1 id="titulo-login">Acesse o HelpDesk</h1>
+  <p class="apoio">Entre com o e-mail e a senha da empresa.</p>
+  <label for="email">E-mail</label>
+  <input id="email" type="email" autocomplete="username" required value="carla@empresa.com">
+  <label for="senha">Senha</label>
+  <input id="senha" type="password" autocomplete="current-password" required>
+  <button type="submit">Entrar</button>
+  <p id="erro-login" class="erro" role="alert"></p>
+  <details class="contas">
+    <summary>Contas de exemplo</summary>
+    <p>A senha está em <code>SENHA_EXEMPLO</code> (veja o README).</p>
+    <ul>
+      <li><code>carla@empresa.com</code> técnica</li>
+      <li><code>ana@empresa.com</code> solicitante</li>
+      <li><code>admin@empresa.com</code> administrador</li>
+    </ul>
+  </details>
+</form>
+
+<main id="tela-sistema" hidden>
+  <div class="faixa">
+    <div class="resumo" id="resumo" aria-live="polite"></div>
+    <button id="mostrar-novo" type="button" aria-expanded="false" aria-controls="novo">+ Novo chamado</button>
+  </div>
+
+  <form class="novo" id="novo" hidden aria-labelledby="t-novo">
+    <h2 id="t-novo">Novo chamado</h2>
+    <div class="grade">
+      <div class="inteiro"><label for="titulo">Título</label><input id="titulo" required minlength="3" maxlength="120" value="Sem acesso à internet"></div>
+      <div class="inteiro"><label for="descricao">Descrição</label><textarea id="descricao" rows="2" required minlength="3" maxlength="2000">O cabo está conectado, mas não navega.</textarea></div>
+      <div><label for="prioridade">Prioridade</label><select id="prioridade"><option value="baixa">Baixa · 72 h</option><option value="media">Média · 24 h</option><option value="alta" selected>Alta · 8 h</option><option value="critica">Crítica · 4 h</option></select></div>
+      <div><label for="ativo">Equipamento</label><select id="ativo"></select></div>
+    </div>
+    <div class="botoes"><button type="submit">Abrir chamado</button><button type="button" id="cancelar-novo" class="discreto">Cancelar</button></div>
+  </form>
+
+  <div class="quadro" id="quadro"></div>
+</main>
+
+<aside class="gaveta" id="painel-avisos" hidden aria-labelledby="t-avisos">
+  <div class="gaveta-topo"><h2 id="t-avisos">Avisos</h2><button type="button" class="discreto" data-fechar="painel-avisos">Fechar</button></div>
+  <div id="avisos"></div>
+</aside>
+
+<aside class="gaveta" id="painel-historico" hidden aria-labelledby="t-historico">
+  <div class="gaveta-topo"><h2 id="t-historico">Histórico</h2><button type="button" class="discreto" data-fechar="painel-historico">Fechar</button></div>
+  <ol class="linha-do-tempo" id="linha-do-tempo"></ol>
+</aside>
+
+<div class="recado" id="recado" role="alert" hidden></div>
+
+<script src="/app.js"></script>
+</body>
+</html>

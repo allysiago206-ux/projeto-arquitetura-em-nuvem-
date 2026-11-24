@@ -1,0 +1,214 @@
+# HelpDesk TI em microsserviços. Sobe tudo com: docker compose up --build
+#
+# Redes: cada banco fica numa rede só dele, junto com o serviço dono. Nenhum outro contêiner
+# alcança aquele banco, nem que tente. A fila (RabbitMQ) fica numa rede com Chamados e Notificações.
+# Só o gateway publica porta, e só no próprio computador.
+
+# O que vale para os quatro serviços em Python
+x-servico: &servico
+  read_only: true
+  tmpfs:
+    - /tmp
+  security_opt:
+    - no-new-privileges:true
+  cap_drop:
+    - ALL
+  restart: unless-stopped
+  # O Docker pergunta ao serviço se ele está bem; o /saude só responde 200 se o banco também responder
+  healthcheck:
+    test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/saude', timeout=3)"]
+    interval: 10s
+    timeout: 5s
+    retries: 3
+    start_period: 20s
+
+# O que vale para os quatro PostgreSQL
+x-banco: &banco
+  image: postgres:17.6-alpine
+  user: postgres
+  read_only: true
+  tmpfs:
+    - /tmp
+    - /var/run/postgresql
+  security_opt:
+    - no-new-privileges:true
+  cap_drop:
+    - ALL
+  restart: unless-stopped
+  healthcheck:
+    test: ["CMD", "pg_isready", "-U", "postgres"]
+    interval: 5s
+    timeout: 3s
+    retries: 10
+
+services:
+  # ---------- bancos: um por serviço, cada um na própria rede ----------
+  banco-usuarios:
+    <<: *banco
+    environment:
+      POSTGRES_DB: usuarios
+      POSTGRES_HOST_AUTH_METHOD: trust  # sem senha: só o serviço de Usuários está nesta rede
+    volumes:
+      - dados-usuarios:/var/lib/postgresql/data
+    networks: [rede-usuarios]
+
+  banco-inventario:
+    <<: *banco
+    environment:
+      POSTGRES_DB: inventario
+      POSTGRES_HOST_AUTH_METHOD: trust
+    volumes:
+      - dados-inventario:/var/lib/postgresql/data
+    networks: [rede-inventario]
+
+  banco-chamados:
+    <<: *banco
+    environment:
+      POSTGRES_DB: chamados
+      POSTGRES_HOST_AUTH_METHOD: trust
+    volumes:
+      - dados-chamados:/var/lib/postgresql/data
+    networks: [rede-chamados]
+
+  banco-notificacoes:
+    <<: *banco
+    environment:
+      POSTGRES_DB: notificacoes
+      POSTGRES_HOST_AUTH_METHOD: trust
+    volumes:
+      - dados-notificacoes:/var/lib/postgresql/data
+    networks: [rede-notificacoes]
+
+  # ---------- fila de eventos ----------
+  rabbitmq:
+    image: rabbitmq:4.1.4-alpine
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    volumes:
+      - dados-rabbitmq:/var/lib/rabbitmq
+      - ./rabbitmq/helpdesk.conf:/etc/rabbitmq/conf.d/20-helpdesk.conf:ro
+    networks: [rede-fila]
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+      start_period: 20s
+
+  # ---------- serviços ----------
+  usuarios:
+    <<: *servico
+    build: ./servico-usuarios
+    environment:
+      DATABASE_URL: postgresql+psycopg://postgres@banco-usuarios:5432/usuarios
+      # A chave privada (opcional, do .env) chega só a este serviço, o único que emite tokens
+      JWT_CHAVE_PRIVADA: ${JWT_CHAVE_PRIVADA:-}
+      TOKEN_MINUTOS: ${TOKEN_MINUTOS:-60}
+      SENHA_EXEMPLO: ${SENHA_EXEMPLO:-Helpdesk2026}
+      DADOS_EXEMPLO: ${DADOS_EXEMPLO:-1}
+      DOCS: ${DOCS:-1}
+    networks: [interna, rede-usuarios]
+    depends_on:
+      banco-usuarios:
+        condition: service_healthy
+
+  inventario:
+    <<: *servico
+    build: ./servico-inventario
+    environment:
+      DATABASE_URL: postgresql+psycopg://postgres@banco-inventario:5432/inventario
+      DOCS: ${DOCS:-1}
+      USUARIOS_URL: http://usuarios:8000
+      DADOS_EXEMPLO: ${DADOS_EXEMPLO:-1}
+    networks: [interna, rede-inventario]
+    depends_on:
+      banco-inventario:
+        condition: service_healthy
+      usuarios:
+        condition: service_healthy
+
+  chamados:
+    <<: *servico
+    build: ./servico-chamados
+    environment:
+      DATABASE_URL: postgresql+psycopg://postgres@banco-chamados:5432/chamados
+      DOCS: ${DOCS:-1}
+      USUARIOS_URL: http://usuarios:8000
+      INVENTARIO_URL: http://inventario:8000
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/%2F
+      DADOS_EXEMPLO: ${DADOS_EXEMPLO:-1}
+    networks: [interna, rede-chamados, rede-fila]
+    depends_on:
+      banco-chamados:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      usuarios:
+        condition: service_healthy
+
+  notificacoes:
+    <<: *servico
+    build: ./servico-notificacoes
+    environment:
+      DATABASE_URL: postgresql+psycopg://postgres@banco-notificacoes:5432/notificacoes
+      DOCS: ${DOCS:-1}
+      USUARIOS_URL: http://usuarios:8000
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/%2F
+    networks: [interna, rede-notificacoes, rede-fila]
+    depends_on:
+      banco-notificacoes:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      usuarios:
+        condition: service_healthy
+
+  # ---------- o único ponto de entrada ----------
+  gateway:
+    build: ./gateway
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8000:8000"
+    networks: [interna]
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8000/saude"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+    depends_on:
+      usuarios:
+        condition: service_healthy
+      inventario:
+        condition: service_healthy
+      chamados:
+        condition: service_healthy
+      notificacoes:
+        condition: service_healthy
+
+networks:
+  interna:
+  rede-usuarios:
+    internal: true
+  rede-inventario:
+    internal: true
+  rede-chamados:
+    internal: true
+  rede-notificacoes:
+    internal: true
+  rede-fila:
+    internal: true
+
+volumes:
+  dados-usuarios:
+  dados-inventario:
+  dados-chamados:
+  dados-notificacoes:
+  dados-rabbitmq:

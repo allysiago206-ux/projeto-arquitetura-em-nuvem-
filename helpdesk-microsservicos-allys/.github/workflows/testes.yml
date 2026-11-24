@@ -1,0 +1,46 @@
+name: Testes e segurança
+on: [push, pull_request]
+
+# O workflow só pode ler o código (privilégio mínimo)
+permissions:
+  contents: read
+
+jobs:
+  # Um job por serviço: cada um instala só as próprias dependências e roda os próprios testes,
+  # como um projeto independente. Se um quebrar, os outros seguem e o resultado mostra qual foi.
+  servico:
+    name: ${{ matrix.servico }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        servico: [servico-usuarios, servico-inventario, servico-chamados, servico-notificacoes]
+    defaults:
+      run:
+        working-directory: ${{ matrix.servico }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements.txt pytest==9.2.0 httpx==0.28.1  # httpx: o TestClient dos testes usa
+      - name: Testes do serviço (inclui os de segurança)
+        run: pytest -q
+      - name: Dependências com falhas conhecidas
+        run: pip install pip-audit==2.10.1 && pip-audit -r requirements.txt
+
+  gateway:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Configuração do Nginx
+        run: docker run --rm -v "$PWD/gateway/nginx.conf:/etc/nginx/nginx.conf:ro" nginxinc/nginx-unprivileged:1.29.1-alpine nginx -t
+      - name: Segurança da tela e do gateway
+        run: pip install pytest==9.2.0 && pytest -q gateway/tests

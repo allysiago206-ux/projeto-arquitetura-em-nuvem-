@@ -1,0 +1,15 @@
+version: 2
+updates:
+  # Cada serviço tem as próprias dependências e o próprio Dockerfile
+  - package-ecosystem: pip
+    directories: ["/servico-usuarios", "/servico-inventario", "/servico-chamados", "/servico-notificacoes"]
+    schedule:
+      interval: weekly
+  - package-ecosystem: docker
+    directories: ["/servico-usuarios", "/servico-inventario", "/servico-chamados", "/servico-notificacoes", "/gateway"]
+    schedule:
+      interval: weekly
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly

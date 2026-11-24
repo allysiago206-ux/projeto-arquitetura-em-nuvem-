@@ -1,0 +1,25 @@
+from fastapi import APIRouter, Depends
+from sqlalchemy.orm import Session
+
+from app import servico
+from app.database import get_db
+from app.dependencias import exigir_perfil, usuario_atual
+from app.esquemas import Perfil, UsuarioCriar, UsuarioPublico, UsuarioSaida
+
+router = APIRouter(prefix="/usuarios", tags=["Usuários"])
+
+
+@router.post("", response_model=UsuarioSaida, status_code=201, dependencies=[Depends(exigir_perfil("admin"))])
+def criar_usuario(dados: UsuarioCriar, db: Session = Depends(get_db)):
+    return servico.criar(db, dados)
+
+
+@router.get("", response_model=list[UsuarioPublico], dependencies=[Depends(usuario_atual)])
+def listar_usuarios(perfil: Perfil | None = None, db: Session = Depends(get_db)):
+    return servico.listar(db, perfil)
+
+
+@router.get("/{usuario_id}", response_model=UsuarioPublico, dependencies=[Depends(usuario_atual)])
+def obter_usuario(usuario_id: int, db: Session = Depends(get_db)):
+    """O serviço de Chamados chama esta rota para conferir o técnico antes de atribuir."""
+    return servico.obter(db, usuario_id)

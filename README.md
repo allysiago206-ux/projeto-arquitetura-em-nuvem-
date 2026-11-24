@@ -62,7 +62,7 @@ sequenceDiagram
     U-->>N: token assinado com a chave privada
     N->>G: POST /chamados (com o token)
     G->>C: encaminha
-    C->>U: GET /auth/chave-publica (só na primeira vez; guarda por 5 min)
+    C->>U: GET /auth/chave-publica (só na primeira vez, guarda por 5 min)
     Note over C: confere a assinatura do token
     C->>I: GET /ativos/{id} (repassa o token)
     Note over I: confere o token do mesmo jeito
